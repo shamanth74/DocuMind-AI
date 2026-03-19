@@ -12,6 +12,7 @@ from app.models import document_chunk
 
 from app.api import user_routes
 from app.api import workspace_routes
+from app.api import document_routes
 
 
 app = FastAPI()
@@ -34,6 +35,7 @@ app.add_middleware(
 
 app.include_router(user_routes.router)
 app.include_router(workspace_routes.router)
+app.include_router(document_routes.router)
 
 @app.get("/")
 def root():

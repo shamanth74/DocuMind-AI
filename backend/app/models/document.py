@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from datetime import datetime
 from app.core.database import Base
 
@@ -13,9 +13,9 @@ class Document(Base):
 
     title = Column(String)
 
-    type = Column(String)
+    file_type = Column(String)
 
-    file_url = Column(String)
+    content = Column(Text)
 
     uploaded_by = Column(Integer, ForeignKey("users.id"))
 

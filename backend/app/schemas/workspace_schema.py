@@ -30,3 +30,9 @@ class MemberOut(BaseModel):
 class WorkspaceMembersResponse(BaseModel):
     total_members: int
     members: list[MemberOut]
+
+
+class CreateTextDocumentRequest(BaseModel):
+    title: str
+    content: str
+    workspace_id: int
