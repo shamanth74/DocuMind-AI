@@ -1,0 +1,90 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.auth import verify_clerk_token
+from app.models.user import User
+from app.schemas.workspace_schema import (
+    CreateWorkspaceRequest,
+    CreateWorkspaceResponse,
+    JoinWorkspaceRequest,
+    WorkspaceOut,
+    WorkspaceMembersResponse,
+)
+from app.services.workspace_service import (
+    create_workspace,
+    get_user_workspaces,
+    join_workspace,
+    get_workspace_members,
+)
+
+router = APIRouter()
+
+
+def get_current_user(payload: dict, db: Session) -> User:
+    clerk_id = payload["sub"]
+    user = db.query(User).filter(User.clerk_id == clerk_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@router.post("/workspace", response_model=CreateWorkspaceResponse)
+async def create_workspace_route(
+    body: CreateWorkspaceRequest,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    invite_code = create_workspace(db=db, name=body.name, user_id=user.id)
+    return {"invite_code": invite_code}
+
+
+@router.get("/workspace", response_model=list[WorkspaceOut])
+async def list_workspaces_route(
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+    workspaces = get_user_workspaces(db=db, user_id=user.id)
+    return workspaces
+
+
+@router.post("/workspaces/join")
+async def join_workspace_route(
+    body: JoinWorkspaceRequest,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+    workspace, already_member = join_workspace(db=db, invite_code=body.invite_code, user_id=user.id)
+
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if already_member:
+        return {"message": "Already joined this workspace"}
+
+    return {"message": "Joined workspace successfully"}
+
+
+@router.get("/workspaces/{workspace_id}/members", response_model=WorkspaceMembersResponse)
+async def list_workspace_members_route(
+    workspace_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    members = get_workspace_members(db=db, workspace_id=workspace_id)
+    return {
+        "total_members": len(members),
+        "members": [{"id": m.id, "name": m.name} for m in members],
+    }
