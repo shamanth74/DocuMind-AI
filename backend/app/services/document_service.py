@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 from fastapi import UploadFile
 
 from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 from app.models.workspace_member import WorkspaceMember
 from app.utils.pdf_parser import extract_text_from_pdf
+from app.utils.text_chunker import split_text_into_chunks
 
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
@@ -49,11 +51,34 @@ def parse_file_content(file_bytes: bytes, file_type: str) -> str:
         text = extract_text_from_pdf(file_bytes)
     else:
         text = file_bytes.decode("utf-8", errors="replace")
-
-    if len(text.strip()) < 50:
-        raise ValueError("Unable to retrieve text from file. File may be incompatible.")
-
     return text
+
+
+def _chunks_exist(db: Session, document_id: int) -> bool:
+    """Check if chunks already exist for a document (prevents duplicates)."""
+    return (
+        db.query(DocumentChunk.id)
+        .filter(DocumentChunk.document_id == document_id)
+        .first()
+        is not None
+    )
+
+
+def _store_chunks_bulk(db: Session, document_id: int, chunk_texts: list):
+    """Bulk insert chunks for a document."""
+    if _chunks_exist(db, document_id):
+        return
+
+    objects = [
+        DocumentChunk(
+            document_id=document_id,
+            chunk_text=text,
+            chunk_index=i,
+        )
+        for i, text in enumerate(chunk_texts)
+    ]
+    db.bulk_save_objects(objects)
+    db.commit()
 
 
 def upload_document(
@@ -65,13 +90,18 @@ def upload_document(
 ) -> Document:
     file_bytes = file.file.read()
 
-    # Parse content first — if this fails, file won't be saved
+    # Extract text
     content = parse_file_content(file_bytes, file_type)
 
-    # Save file locally only after successful parsing
+    # Generate chunks and validate
+    chunk_texts = split_text_into_chunks(content)
+    if not content.strip() or not chunk_texts:
+        raise ValueError("Unable to process document. No valid content extracted.")
+
+    # Save file locally only after validation
     save_file_locally(file.filename, file_bytes)
 
-    # Save to DB
+    # Save document to DB
     document = Document(
         workspace_id=workspace_id,
         title=file.filename,
@@ -79,10 +109,12 @@ def upload_document(
         content=content,
         uploaded_by=user_id,
     )
-
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Bulk insert chunks
+    _store_chunks_bulk(db, document.id, chunk_texts)
 
     return document
 
@@ -94,6 +126,11 @@ def create_text_document(
     workspace_id: int,
     user_id: int,
 ) -> Document:
+    # Generate chunks and validate
+    chunk_texts = split_text_into_chunks(content)
+    if not content.strip() or not chunk_texts:
+        raise ValueError("Unable to process document. No valid content extracted.")
+
     document = Document(
         workspace_id=workspace_id,
         title=title,
@@ -101,10 +138,12 @@ def create_text_document(
         content=content,
         uploaded_by=user_id,
     )
-
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Bulk insert chunks
+    _store_chunks_bulk(db, document.id, chunk_texts)
 
     return document
 
@@ -120,4 +159,3 @@ def get_workspace_documents(db: Session, workspace_id: int) -> list:
         .filter(Document.workspace_id == workspace_id)
         .all()
     )
-

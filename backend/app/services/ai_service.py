@@ -4,7 +4,7 @@ from groq import Groq
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from app.models.document import Document
+from app.services.rag_service import get_relevant_chunks
 
 load_dotenv()
 
@@ -21,43 +21,32 @@ def _get_groq_client() -> Groq:
     return _client
 
 
-MAX_CONTEXT_LENGTH = 4000
-
-
-def get_workspace_context(db: Session, workspace_id: int) -> str:
-    """Fetch all documents for a workspace and combine content, truncated to max size."""
-
-    documents = (
-        db.query(Document.content)
-        .filter(Document.workspace_id == workspace_id)
-        .all()
-    )
-
-    if not documents:
-        return ""
-
-    combined = ""
-    for doc in documents:
-        if doc.content:
-            combined += doc.content + "\n\n"
-        if len(combined) >= MAX_CONTEXT_LENGTH:
-            break
-
-    return combined[:MAX_CONTEXT_LENGTH]
+MAX_CONTEXT_LENGTH = 3000
 
 
 def ask_question(db: Session, workspace_id: int, question: str) -> str:
-    """Send question + document context to Groq and return the answer."""
+    """Retrieve relevant chunks and send to Groq for answering."""
 
-    context = get_workspace_context(db, workspace_id)
+    chunks = get_relevant_chunks(db, workspace_id, question)
+
+    if not chunks:
+        return "No relevant information found in documents."
+
+    # Combine top chunks with strict size limit
+    context = ""
+    for chunk in chunks:
+        candidate = context + chunk + "\n\n"
+        if len(candidate) > MAX_CONTEXT_LENGTH:
+            break
+        context = candidate
 
     if not context.strip():
-        return "No documents found in this workspace."
+        return "No relevant information found in documents."
 
     prompt = (
-        "Answer the question ONLY using the provided documents.\n"
+        "You are an AI assistant. Answer ONLY using the provided context.\n"
         "If the answer is not found, say 'Not found in documents'.\n\n"
-        f"Documents:\n{context}\n\n"
+        f"Context:\n{context}\n\n"
         f"Question:\n{question}"
     )
 
@@ -72,4 +61,4 @@ def ask_question(db: Session, workspace_id: int, question: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"AI error: {str(e)}"
+        return f"Unable to process your question at this time. Please try again later."

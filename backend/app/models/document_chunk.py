@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, Text
+from sqlalchemy import Column, Integer, ForeignKey, Text, Index
 from app.core.database import Base
 
 
@@ -8,7 +8,7 @@ class DocumentChunk(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    document_id = Column(Integer, ForeignKey("documents.id"))
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), index=True)
 
     chunk_text = Column(Text)
 
