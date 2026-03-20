@@ -9,8 +9,10 @@ from app.services.document_service import (
     check_workspace_membership,
     upload_document,
     create_text_document,
+    get_workspace_documents,
 )
 from app.schemas.workspace_schema import CreateTextDocumentRequest
+from app.schemas.document_schema import DocumentOut
 
 router = APIRouter()
 
@@ -99,3 +101,26 @@ async def create_text_document_route(
             "workspace_id": document.workspace_id,
         },
     }
+
+
+@router.get("/documents", response_model=list[DocumentOut])
+async def list_documents_route(
+    workspace_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    if not check_workspace_membership(db, workspace_id, user.id):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace")
+
+    documents = get_workspace_documents(db=db, workspace_id=workspace_id)
+    return [
+        {
+            "id": d.id,
+            "title": d.title,
+            "file_type": d.file_type,
+            "created_at": d.created_at,
+        }
+        for d in documents
+    ]

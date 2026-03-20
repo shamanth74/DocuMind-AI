@@ -107,3 +107,17 @@ def create_text_document(
     db.refresh(document)
 
     return document
+
+
+def get_workspace_documents(db: Session, workspace_id: int) -> list:
+    return (
+        db.query(
+            Document.id,
+            Document.title,
+            Document.file_type,
+            Document.created_at,
+        )
+        .filter(Document.workspace_id == workspace_id)
+        .all()
+    )
+
