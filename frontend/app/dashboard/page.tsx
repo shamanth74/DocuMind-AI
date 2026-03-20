@@ -1,55 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
-import axios from "axios";
-
-type User = {
-  id: number;
-  email: string;
-  name: string;
-  role: "super_admin" | "member";
-};
+import { useUser } from "@clerk/nextjs";
+import AdminDashboard from "@/components/AdminDashboard";
+import UserDashboard from "@/components/UserDashboard";
 
 export default function Dashboard() {
-
   const { isLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
 
-  const [user, setUser] = useState<User | null>(null);
+  // Mock role — change to "super_admin" to test admin view
+  const role = "member";
 
-  useEffect(() => {
+  if (!isLoaded) return <div className="h-screen w-full flex items-center justify-center text-neutral-500 text-sm">Loading...</div>;
 
-    const loadUser = async () => {
+  if (!isSignedIn) return <div className="h-screen w-full flex items-center justify-center text-neutral-500 text-sm">Please login</div>;
 
-      if (!isLoaded || !isSignedIn) return;
-
-      const token = await getToken();
-
-      console.log("TOKEN:", token);
-
-      const res = await axios.get("http://127.0.0.1:8000/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setUser(res.data);
-    };
-
-    loadUser();
-
-  }, [isLoaded, isSignedIn]);
-
-  if (!isLoaded) return <div>Loading Clerk...</div>;
-
-  if (!isSignedIn) return <div>Please login</div>;
-
-  if (!user) return <div>Loading user...</div>;
-
-  if (user.role === "super_admin") {
-    return <div>Admin Dashboard</div>;
+  if (role === "super_admin") {
+    return <AdminDashboard />;
   }
 
-  return <div>User Dashboard</div>;
+  return <UserDashboard />;
 }
