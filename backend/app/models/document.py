@@ -9,7 +9,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"))
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"))
 
     title = Column(String)
 

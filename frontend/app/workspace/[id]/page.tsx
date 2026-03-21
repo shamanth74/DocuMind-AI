@@ -6,7 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import {
-  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser,
+  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser, deleteDocument,
   type Document, type Workspace, type User
 } from "@/services/api";
 
@@ -52,6 +52,12 @@ export default function WorkspacePage() {
 
   const isAdmin = user?.role === "super_admin";
 
+  const refreshDocs = async () => {
+    const docs = await getDocuments(getToken, workspaceId);
+    setDocuments(docs);
+    return docs;
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -80,11 +86,7 @@ export default function WorkspacePage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, aiLoading]);
 
-  // ── Refresh documents ──
-  const refreshDocs = async () => {
-    const docs = await getDocuments(getToken, workspaceId);
-    setDocuments(docs);
-  };
+
 
   // ── File Upload ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -230,20 +232,43 @@ export default function WorkspacePage() {
                   <p className="px-2 text-xs text-neutral-400">No documents yet</p>
                 ) : (
                   documents.map((doc) => (
-                    <button
+                    <div
                       key={doc.id}
-                      onClick={() => {
-                        console.log("selectedDocument", doc);
-                        setSelectedDoc(doc);
-                      }}
-                      className={`w-full flex items-center gap-3 px-2 py-1.5 text-sm font-medium rounded-md ${selectedDoc?.id === doc.id ? "bg-neutral-200/60 text-neutral-900" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"}`}
+                      className={`w-full flex items-center gap-3 px-2 py-1.5 text-sm font-medium rounded-md group ${selectedDoc?.id === doc.id ? "bg-neutral-200/60 text-neutral-900" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"}`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${selectedDoc?.id === doc.id ? "text-neutral-500" : "text-neutral-400"}`}>
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                      </svg>
-                      <span className="truncate">{doc.title}</span>
-                    </button>
+                      <button
+                        onClick={() => {
+                          console.log("selectedDocument", doc);
+                          setSelectedDoc(doc);
+                        }}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${selectedDoc?.id === doc.id ? "text-neutral-500" : "text-neutral-400"}`}>
+                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <span className="truncate">{doc.title}</span>
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!confirm("Delete this document? This cannot be undone.")) return;
+                            try {
+                              await deleteDocument(getToken, doc.id);
+                              const remaining = await refreshDocs();
+                              setSelectedDoc(remaining.length > 0 ? remaining[0] : null);
+                            } catch (err) {
+                              console.error("Delete failed:", err);
+                            }
+                          }}
+                          className="shrink-0 p-1 text-neutral-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Delete document"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                      )}
+                    </div>
                   ))
                 )}
               </div>

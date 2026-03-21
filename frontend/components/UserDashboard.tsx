@@ -18,6 +18,7 @@ interface Props {
 
 export default function UserDashboard({ workspaces, getToken, onRefresh }: Props) {
   const router = useRouter();
+  const [currentView, setCurrentView] = useState<"home" | "about" | "support">("home");
   const [modalOpen, setModalOpen] = useState(false);
   const [workspaceCode, setWorkspaceCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -65,37 +66,37 @@ export default function UserDashboard({ workspaces, getToken, onRefresh }: Props
         {/* Sidebar */}
         <aside className="w-60 border-r border-neutral-200 bg-white flex-col py-4 shrink-0 hidden md:flex z-0">
           <nav className="flex-1 px-3 space-y-1">
-            <a href="#" className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md bg-neutral-100 text-neutral-900 transition-colors duration-200">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-700">
+            <button onClick={() => setCurrentView("home")} className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${currentView === "home" ? "bg-neutral-100 text-neutral-900" : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={currentView === "home" ? "text-neutral-700" : "text-neutral-500"}>
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9 22 9 12 15 12 15 22"></polyline>
               </svg>
               Home
-            </a>
+            </button>
 
-            <a href="#" className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors duration-200" onClick={openModal}>
+            <button onClick={openModal} className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors duration-200">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-500">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
               </svg>
               Join Workspace
-            </a>
+            </button>
 
             <div className="pt-6 pb-2">
               <p className="px-3 text-xs font-semibold text-neutral-400 tracking-wider uppercase">Resources</p>
             </div>
 
-            <a href="#" className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors duration-200">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-500">
+            <button onClick={() => setCurrentView("about")} className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${currentView === "about" ? "bg-neutral-100 text-neutral-900" : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={currentView === "about" ? "text-neutral-700" : "text-neutral-500"}>
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="16" x2="12" y2="12"></line>
                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
               </svg>
               About
-            </a>
+            </button>
 
-            <a href="#" className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors duration-200">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-500">
+            <button onClick={() => setCurrentView("support")} className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${currentView === "support" ? "bg-neutral-100 text-neutral-900" : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={currentView === "support" ? "text-neutral-700" : "text-neutral-500"}>
                 <circle cx="12" cy="12" r="10"></circle>
                 <circle cx="12" cy="12" r="4"></circle>
                 <line x1="4.93" y1="4.93" x2="9.17" y2="9.17"></line>
@@ -105,12 +106,62 @@ export default function UserDashboard({ workspaces, getToken, onRefresh }: Props
                 <line x1="4.93" y1="19.07" x2="9.17" y2="14.83"></line>
               </svg>
               Support
-            </a>
+            </button>
           </nav>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
+        {currentView === "about" ? (
+          <main className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-8 md:p-10 lg:p-12">
+              <div className="bg-white border border-neutral-200 rounded-xl p-8 shadow-sm">
+                <div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mb-6 border border-neutral-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#525252" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 mb-2">About DocuMind AI</h1>
+                <p className="text-neutral-500 text-sm leading-relaxed mb-6">The intelligence layer for your documents.</p>
+                <div className="space-y-4 text-sm text-neutral-600 leading-relaxed">
+                  <p>DocuMind AI is a collaborative document management platform that brings AI-powered intelligence to your workspace. Upload PDFs and text documents, and let our AI assistant help you find answers instantly.</p>
+                  <p>Organize your work into workspaces, invite team members with unique invite codes, and query your documents using natural language — all from a clean, modern interface.</p>
+                  <div className="pt-4 border-t border-neutral-100">
+                    <h2 className="font-semibold text-neutral-900 mb-3">Key Features</h2>
+                    <ul className="space-y-2">
+                      <li className="flex items-start gap-2"><span className="text-neutral-400 mt-0.5">•</span><span><strong className="text-neutral-800">AI-Powered Chat</strong> — Ask questions about your uploaded documents and get instant, context-aware answers.</span></li>
+                      <li className="flex items-start gap-2"><span className="text-neutral-400 mt-0.5">•</span><span><strong className="text-neutral-800">Workspace Management</strong> — Create workspaces, manage documents, and invite team members.</span></li>
+                      <li className="flex items-start gap-2"><span className="text-neutral-400 mt-0.5">•</span><span><strong className="text-neutral-800">Document Viewer</strong> — View PDFs and text documents directly in the browser with download support.</span></li>
+                      <li className="flex items-start gap-2"><span className="text-neutral-400 mt-0.5">•</span><span><strong className="text-neutral-800">Secure Access</strong> — Role-based access control with Clerk authentication.</span></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        ) : currentView === "support" ? (
+          <main className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-8 md:p-10 lg:p-12">
+              <div className="bg-white border border-neutral-200 rounded-xl p-8 shadow-sm">
+                <div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center mb-6 border border-neutral-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#525252" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"></line><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"></line><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"></line><line x1="14.83" y1="9.17" x2="18.36" y2="5.64"></line><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"></line></svg>
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 mb-2">Support</h1>
+                <p className="text-neutral-500 text-sm leading-relaxed mb-6">Need help? We&apos;re here for you.</p>
+                <div className="bg-neutral-50 border border-neutral-100 rounded-lg p-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#525252" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    <h2 className="font-semibold text-neutral-900 text-sm">Email Us</h2>
+                  </div>
+                  <p className="text-sm text-neutral-600 mb-3">For any questions, feedback, or issues — reach out via email and we&apos;ll get back to you as soon as possible.</p>
+                  <a href="mailto:shamanthm.work@gmail.com" className="inline-flex items-center gap-2 text-sm font-medium text-neutral-900 hover:text-neutral-600 transition-colors">
+                    <span>shamanthm.work@gmail.com</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                  </a>
+                </div>
+                <p className="mt-4 text-sm text-neutral-500">We typically respond within 24–48 hours on business days.</p>
+              </div>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-8 md:p-10 lg:p-12">
             <div className="mb-8">
               <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Your Workspaces</h1>
@@ -134,7 +185,8 @@ export default function UserDashboard({ workspaces, getToken, onRefresh }: Props
               ))}
             </div>
           </div>
-        </main>
+          </main>
+        )}
       </div>
 
       {/* FAB */}

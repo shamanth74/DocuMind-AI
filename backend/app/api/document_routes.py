@@ -1,9 +1,12 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import verify_clerk_token
 from app.models.user import User
+from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 from app.services.document_service import (
     validate_file_type,
     check_workspace_membership,
@@ -131,3 +134,36 @@ async def list_documents_route(
             doc["content"] = d.content
         result.append(doc)
     return result
+
+
+@router.delete("/documents/{document_id}")
+async def delete_document_route(
+    document_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Delete chunks
+    db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+
+    # Delete file from disk
+    if document.file_type in ("pdf", "text"):
+        file_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "uploads",
+            str(document.workspace_id), document.title
+        )
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    db.delete(document)
+    db.commit()
+
+    return {"message": "Document deleted successfully"}

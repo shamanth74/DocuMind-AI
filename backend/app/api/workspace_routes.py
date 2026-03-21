@@ -1,9 +1,15 @@
+import os
+import shutil
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import verify_clerk_token
 from app.models.user import User
+from app.models.workspace import Workspace
+from app.models.workspace_member import WorkspaceMember
+from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 from app.schemas.workspace_schema import (
     CreateWorkspaceRequest,
     CreateWorkspaceResponse,
@@ -88,3 +94,40 @@ async def list_workspace_members_route(
         "total_members": len(members),
         "members": [{"id": m.id, "name": m.name} for m in members],
     }
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace_route(
+    workspace_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Delete all chunks for documents in this workspace
+    doc_ids = [d.id for d in db.query(Document.id).filter(Document.workspace_id == workspace_id).all()]
+    if doc_ids:
+        db.query(DocumentChunk).filter(DocumentChunk.document_id.in_(doc_ids)).delete(synchronize_session=False)
+
+    # Delete all documents
+    db.query(Document).filter(Document.workspace_id == workspace_id).delete(synchronize_session=False)
+
+    # Delete all members
+    db.query(WorkspaceMember).filter(WorkspaceMember.workspace_id == workspace_id).delete(synchronize_session=False)
+
+    # Delete files from disk
+    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", str(workspace_id))
+    if os.path.exists(uploads_dir):
+        shutil.rmtree(uploads_dir, ignore_errors=True)
+
+    db.delete(workspace)
+    db.commit()
+
+    return {"message": "Workspace deleted successfully"}

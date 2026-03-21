@@ -130,3 +130,12 @@ export async function askAI(getToken: GetTokenFn, workspaceId: number, question:
     body: JSON.stringify({ workspace_id: workspaceId, question }),
   });
 }
+
+// ── Delete ──
+export async function deleteDocument(getToken: GetTokenFn, documentId: number) {
+  return authFetch(`/documents/${documentId}`, getToken, { method: "DELETE" });
+}
+
+export async function deleteWorkspace(getToken: GetTokenFn, workspaceId: number) {
+  return authFetch(`/workspaces/${workspaceId}`, getToken, { method: "DELETE" });
+}
