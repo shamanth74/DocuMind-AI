@@ -2,25 +2,36 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { UserButton } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import type { Workspace, GetTokenFn } from "@/services/api";
+import { joinWorkspace } from "@/services/api";
 
-const DUMMY_WORKSPACES = [
-  { id: 1, name: "Marketing Campaign 2024", initials: "MC", created: "Jan 12, 2024" },
-  { id: 2, name: "Engineering Specs", initials: "ES", created: "Feb 04, 2024" },
-  { id: 3, name: "Design System V2", initials: "DS", created: "Mar 15, 2024" },
-  { id: 4, name: "Q3 Board Deck", initials: "QB", created: "Apr 01, 2024" },
-  { id: 5, name: "Product Roadmap", initials: "PR", created: "May 20, 2024" },
-  { id: 6, name: "Legal Contracts", initials: "LC", created: "Jun 10, 2024" },
-];
+function getInitials(name: string): string {
+  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
 
-export default function UserDashboard() {
+interface Props {
+  workspaces: Workspace[];
+  getToken: GetTokenFn;
+  onRefresh: () => Promise<void>;
+}
+
+export default function UserDashboard({ workspaces, getToken, onRefresh }: Props) {
+  const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [workspaceCode, setWorkspaceCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const openModal = () => setModalOpen(true);
+  const openModal = () => {
+    setError("");
+    setModalOpen(true);
+  };
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setWorkspaceCode("");
+    setError("");
   }, []);
 
   useEffect(() => {
@@ -107,16 +118,16 @@ export default function UserDashboard() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {DUMMY_WORKSPACES.map((ws) => (
+              {workspaces.map((ws) => (
                 <div key={ws.id} className="group bg-white border border-neutral-200 rounded-xl p-5 flex flex-col transition-all duration-200 ease-out hover:shadow-sm hover:-translate-y-[2px] hover:border-neutral-300">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-10 h-10 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center">
-                      <span className="text-neutral-500 font-medium text-sm">{ws.initials}</span>
+                      <span className="text-neutral-500 font-medium text-sm">{getInitials(ws.name)}</span>
                     </div>
                   </div>
                   <h3 className="font-semibold text-neutral-900 text-base leading-tight">{ws.name}</h3>
-                  <p className="text-xs text-neutral-500 mt-1.5 flex-1">Created {ws.created}</p>
-                  <button className="mt-6 w-full py-2 px-4 bg-white border border-neutral-200 text-neutral-700 text-sm font-medium rounded-lg transition-colors duration-200 hover:bg-neutral-50 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-200">
+                  <p className="text-xs text-neutral-500 mt-1.5 flex-1">Code: {ws.invite_code}</p>
+                  <button onClick={() => router.push(`/workspace/${ws.id}`)} className="mt-6 w-full py-2 px-4 bg-white border border-neutral-200 text-neutral-700 text-sm font-medium rounded-lg transition-colors duration-200 hover:bg-neutral-50 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-200">
                     Enter Workspace
                   </button>
                 </div>
@@ -156,10 +167,28 @@ export default function UserDashboard() {
                 <p className="mt-2 text-xs text-neutral-500">Ask your workspace admin for the 6-character invite code.</p>
               </div>
 
+              {error && <p className="px-5 text-xs text-red-500">{error}</p>}
               <div className="px-5 py-4 bg-neutral-50 border-t border-neutral-100 flex justify-end gap-3">
                 <button onClick={closeModal} className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">Cancel</button>
-                <button className="px-4 py-2 bg-neutral-900 text-white text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1">
-                  Join Workspace
+                <button
+                  disabled={submitting}
+                  onClick={async () => {
+                    setSubmitting(true);
+                    setError("");
+                    try {
+                      if (!workspaceCode.trim()) { setError("Code is required"); setSubmitting(false); return; }
+                      await joinWorkspace(getToken, workspaceCode.trim());
+                      closeModal();
+                      await onRefresh();
+                    } catch (err: any) {
+                      setError(err?.message ? JSON.parse(err.message)?.detail || "Something went wrong" : "Something went wrong");
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                  className="px-4 py-2 bg-neutral-900 text-white text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1 disabled:opacity-50"
+                >
+                  {submitting ? "Joining..." : "Join Workspace"}
                 </button>
               </div>
             </div>

@@ -37,9 +37,11 @@ def check_workspace_membership(db: Session, workspace_id: int, user_id: int) -> 
     )
 
 
-def save_file_locally(filename: str, file_bytes: bytes) -> str:
-    """Save file to uploads/ directory and return the file path."""
-    file_path = os.path.join(UPLOAD_DIR, filename)
+def save_file_locally(workspace_id: int, filename: str, file_bytes: bytes) -> str:
+    """Save file to uploads/{workspace_id}/ directory and return the file path."""
+    ws_dir = os.path.join(UPLOAD_DIR, str(workspace_id))
+    os.makedirs(ws_dir, exist_ok=True)
+    file_path = os.path.join(ws_dir, filename)
     with open(file_path, "wb") as f:
         f.write(file_bytes)
     return file_path
@@ -99,7 +101,7 @@ def upload_document(
         raise ValueError("Unable to process document. No valid content extracted.")
 
     # Save file locally only after validation
-    save_file_locally(file.filename, file_bytes)
+    save_file_locally(workspace_id, file.filename, file_bytes)
 
     # Save document to DB
     document = Document(
@@ -150,12 +152,7 @@ def create_text_document(
 
 def get_workspace_documents(db: Session, workspace_id: int) -> list:
     return (
-        db.query(
-            Document.id,
-            Document.title,
-            Document.file_type,
-            Document.created_at,
-        )
+        db.query(Document)
         .filter(Document.workspace_id == workspace_id)
         .all()
     )

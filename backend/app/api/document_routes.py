@@ -103,7 +103,7 @@ async def create_text_document_route(
     }
 
 
-@router.get("/documents", response_model=list[DocumentOut])
+@router.get("/documents")
 async def list_documents_route(
     workspace_id: int,
     payload: dict = Depends(verify_clerk_token),
@@ -115,12 +115,19 @@ async def list_documents_route(
         raise HTTPException(status_code=403, detail="You are not a member of this workspace")
 
     documents = get_workspace_documents(db=db, workspace_id=workspace_id)
-    return [
-        {
+    result = []
+    for d in documents:
+        doc = {
             "id": d.id,
             "title": d.title,
             "file_type": d.file_type,
+            "file_url": None,
+            "content": None,
             "created_at": d.created_at,
         }
-        for d in documents
-    ]
+        if d.file_type in ("pdf", "text"):
+            doc["file_url"] = f"/uploads/{d.workspace_id}/{d.title}"
+        if d.file_type == "raw_text":
+            doc["content"] = d.content
+        result.append(doc)
+    return result
