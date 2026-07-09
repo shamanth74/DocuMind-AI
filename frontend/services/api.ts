@@ -139,3 +139,26 @@ export async function deleteDocument(getToken: GetTokenFn, documentId: number) {
 export async function deleteWorkspace(getToken: GetTokenFn, workspaceId: number) {
   return authFetch(`/workspaces/${workspaceId}`, getToken, { method: "DELETE" });
 }
+
+// ── Authenticated File Access ──
+/**
+ * Fetches a document file through the authenticated download endpoint
+ * and returns a blob object URL for rendering in the browser.
+ * Call URL.revokeObjectURL(blobUrl) when done to free memory.
+ */
+export async function getDocumentBlobUrl(getToken: GetTokenFn, fileUrl: string): Promise<string> {
+  const token = await getToken();
+  if (!token) throw { status: 401, message: "No token available" };
+
+  const res = await fetch(`${API_BASE}${fileUrl}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw { status: res.status, message };
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}

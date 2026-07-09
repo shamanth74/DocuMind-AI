@@ -6,7 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import {
-  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser, deleteDocument,
+  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser, deleteDocument, getDocumentBlobUrl,
   type Document, type Workspace, type User
 } from "@/services/api";
 
@@ -43,6 +43,10 @@ export default function WorkspacePage() {
 
   // Invite copy state
   const [copied, setCopied] = useState(false);
+
+  // Authenticated blob URL for file viewer
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobLoading, setBlobLoading] = useState(false);
 
   // AI Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -86,7 +90,37 @@ export default function WorkspacePage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, aiLoading]);
 
+  // Load authenticated blob URL when a file-based document is selected
+  useEffect(() => {
+    // Reset state for every selection change
+    setBlobUrl(null);
+    setBlobLoading(false);
 
+    if (!selectedDoc?.file_url) return;
+
+    let revoked = false;
+    let objectUrl: string | null = null;
+
+    const loadBlob = async () => {
+      setBlobLoading(true);
+      try {
+        objectUrl = await getDocumentBlobUrl(getToken, selectedDoc.file_url!);
+        if (!revoked) setBlobUrl(objectUrl);
+      } catch (err) {
+        console.error("Failed to load document blob:", err);
+      } finally {
+        if (!revoked) setBlobLoading(false);
+      }
+    };
+
+    loadBlob();
+
+    // Cleanup: revoke blob URL when selection changes or component unmounts
+    return () => {
+      revoked = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedDoc?.id, selectedDoc?.file_url, getToken]);
 
   // ── File Upload ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -322,9 +356,14 @@ export default function WorkspacePage() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      {selectedDoc.file_url && (
+                      {selectedDoc.file_url && blobUrl && (
                         <button
-                          onClick={() => window.open(`http://localhost:8000${selectedDoc.file_url}`, "_blank")}
+                          onClick={() => {
+                            const a = document.createElement("a");
+                            a.href = blobUrl;
+                            a.download = selectedDoc.title;
+                            a.click();
+                          }}
                           title="Download"
                           className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-all"
                         >
@@ -336,19 +375,29 @@ export default function WorkspacePage() {
 
                   {/* Document Content */}
                   {selectedDoc.file_type === "pdf" && selectedDoc.file_url ? (
-                    <iframe
-                      src={`http://localhost:8000${selectedDoc.file_url}`}
-                      className="w-full rounded-xl border border-neutral-100"
-                      style={{ height: "calc(100vh - 220px)" }}
-                      title={selectedDoc.title}
-                    />
+                    blobLoading ? (
+                      <div className="w-full rounded-xl border border-neutral-100 flex items-center justify-center text-neutral-400 text-sm" style={{ height: "calc(100vh - 220px)" }}>
+                        Loading document...
+                      </div>
+                    ) : blobUrl ? (
+                      <iframe
+                        src={blobUrl}
+                        className="w-full rounded-xl border border-neutral-100"
+                        style={{ height: "calc(100vh - 220px)" }}
+                        title={selectedDoc.title}
+                      />
+                    ) : (
+                      <div className="w-full rounded-xl border border-neutral-100 flex items-center justify-center text-neutral-400 text-sm" style={{ height: "calc(100vh - 220px)" }}>
+                        Failed to load document
+                      </div>
+                    )
                   ) : selectedDoc.file_type === "raw_text" && selectedDoc.content ? (
                     <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-6 overflow-y-auto custom-scrollbar" style={{ maxHeight: "calc(100vh - 220px)" }}>
                       <pre className="text-sm text-neutral-800 leading-relaxed whitespace-pre-wrap font-sans">{selectedDoc.content}</pre>
                     </div>
                   ) : selectedDoc.file_type === "text" && selectedDoc.file_url ? (
                     <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-6 overflow-y-auto custom-scrollbar" style={{ maxHeight: "calc(100vh - 220px)" }}>
-                      <p className="text-sm text-neutral-600 mb-3">Text file — <a href={`http://localhost:8000${selectedDoc.file_url}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-neutral-900">View raw file</a></p>
+                      <p className="text-sm text-neutral-600 mb-3">Text file — {blobUrl ? <a href={blobUrl} download={selectedDoc.title} className="underline hover:text-neutral-900">Download raw file</a> : "Loading..."}</p>
                       <p className="text-sm text-neutral-500">Use the AI chat to ask questions about this document.</p>
                     </div>
                   ) : (

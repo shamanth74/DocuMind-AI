@@ -1,5 +1,8 @@
 import os
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,6 +19,9 @@ from app.services.document_service import (
 )
 from app.schemas.workspace_schema import CreateTextDocumentRequest
 from app.schemas.document_schema import DocumentOut
+from app.services.document_service import UPLOAD_DIR
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -129,11 +135,56 @@ async def list_documents_route(
             "created_at": d.created_at,
         }
         if d.file_type in ("pdf", "text"):
-            doc["file_url"] = f"/uploads/{d.workspace_id}/{d.title}"
+            doc["file_url"] = f"/documents/{d.id}/download"
         if d.file_type == "raw_text":
             doc["content"] = d.content
         result.append(doc)
     return result
+
+
+@router.get("/documents/{document_id}/download")
+async def download_document_route(
+    document_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Authenticated file download. Verifies JWT and workspace membership
+    before streaming the file. Replaces the previous public StaticFiles mount.
+    """
+    user = get_current_user(payload, db)
+
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Verify the requester is a member of the document's workspace
+    if not check_workspace_membership(db, document.workspace_id, user.id):
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+
+    # Stream file-based documents (PDF / text)
+    if document.file_type in ("pdf", "text"):
+        file_path = os.path.join(UPLOAD_DIR, str(document.workspace_id), document.title)
+        if not os.path.exists(file_path):
+            logger.error(f"File missing on disk: {file_path}")
+            raise HTTPException(status_code=404, detail="File not found on disk")
+
+        media_type = "application/pdf" if document.file_type == "pdf" else "text/plain"
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            filename=document.title,
+        )
+
+    # Return raw text content directly
+    if document.file_type == "raw_text":
+        return Response(
+            content=document.content or "",
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{document.title}"'},
+        )
+
+    raise HTTPException(status_code=400, detail="Unsupported file type")
 
 
 @router.delete("/documents/{document_id}")
