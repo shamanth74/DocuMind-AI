@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from datetime import datetime
 from app.core.database import Base
 
@@ -12,5 +12,7 @@ class Workspace(Base):
     name = Column(String)
 
     invite_code = Column(String, unique=True)
+
+    created_by = Column(Integer, ForeignKey("users.id"))
 
     created_at = Column(DateTime, default=datetime.utcnow)

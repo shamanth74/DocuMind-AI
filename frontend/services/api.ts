@@ -12,6 +12,7 @@ export type Workspace = {
   id: number;
   name: string;
   invite_code: string;
+  created_by: number;
 };
 
 export type Document = {
@@ -85,6 +86,14 @@ export async function joinWorkspace(getToken: GetTokenFn, inviteCode: string): P
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ invite_code: inviteCode }),
   });
+}
+
+export async function getWorkspaceMembers(getToken: GetTokenFn, workspaceId: number): Promise<{ total_members: number, members: User[] }> {
+  return authFetch(`/workspaces/${workspaceId}/members`, getToken);
+}
+
+export async function removeWorkspaceMember(getToken: GetTokenFn, workspaceId: number, memberId: number) {
+  return authFetch(`/workspaces/${workspaceId}/members/${memberId}`, getToken, { method: "DELETE" });
 }
 
 // ── Documents ──

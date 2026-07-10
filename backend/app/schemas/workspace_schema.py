@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class CreateWorkspaceRequest(BaseModel):
@@ -17,6 +18,7 @@ class WorkspaceOut(BaseModel):
     id: int
     name: str
     invite_code: str
+    created_by: Optional[int] = None
 
     class Config:
         from_attributes = True

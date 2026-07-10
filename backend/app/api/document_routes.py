@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.auth import verify_clerk_token
 from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.services.document_service import (
@@ -43,18 +44,18 @@ async def upload_document_route(
 ):
     user = get_current_user(payload, db)
 
-    # Only super_admin can upload
-    if user.role != "super_admin":
+    # Only workspace owner can upload
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+        
+    if workspace.created_by != user.id and user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized to upload documents")
 
     # Validate file type
     file_type = validate_file_type(file.content_type)
     if not file_type:
         raise HTTPException(status_code=400, detail="Only PDF and text files are allowed")
-
-    # Check workspace membership
-    if not check_workspace_membership(db, workspace_id, user.id):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace")
 
     # Upload and parse
     try:
@@ -87,11 +88,12 @@ async def create_text_document_route(
 ):
     user = get_current_user(payload, db)
 
-    if user.role != "super_admin":
+    workspace = db.query(Workspace).filter(Workspace.id == body.workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+        
+    if workspace.created_by != user.id and user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    if not check_workspace_membership(db, body.workspace_id, user.id):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace")
 
     document = create_text_document(
         db=db,
@@ -195,12 +197,13 @@ async def delete_document_route(
 ):
     user = get_current_user(payload, db)
 
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
+        
+    workspace = db.query(Workspace).filter(Workspace.id == document.workspace_id).first()
+    if workspace and workspace.created_by != user.id and user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     # Delete chunks
     db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()

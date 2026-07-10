@@ -23,6 +23,7 @@ from app.services.workspace_service import (
     join_workspace,
     get_workspace_members,
 )
+from app.services.document_service import check_workspace_membership
 
 router = APIRouter()
 
@@ -42,9 +43,6 @@ async def create_workspace_route(
     db: Session = Depends(get_db),
 ):
     user = get_current_user(payload, db)
-
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     invite_code = create_workspace(db=db, name=body.name, user_id=user.id)
     return {"invite_code": invite_code}
@@ -86,8 +84,14 @@ async def list_workspace_members_route(
 ):
     user = get_current_user(payload, db)
 
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    # Allow if they are the owner OR a member
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.created_by != user.id and not check_workspace_membership(db, workspace_id, user.id):
+        if user.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Not authorized")
 
     members = get_workspace_members(db=db, workspace_id=workspace_id)
     return {
@@ -104,12 +108,12 @@ async def delete_workspace_route(
 ):
     user = get_current_user(payload, db)
 
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.created_by != user.id and user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     # Delete all chunks for documents in this workspace
     doc_ids = [d.id for d in db.query(Document.id).filter(Document.workspace_id == workspace_id).all()]
@@ -131,3 +135,41 @@ async def delete_workspace_route(
     db.commit()
 
     return {"message": "Workspace deleted successfully"}
+
+
+@router.delete("/workspaces/{workspace_id}/members/{member_user_id}")
+async def remove_workspace_member_route(
+    workspace_id: int,
+    member_user_id: int,
+    payload: dict = Depends(verify_clerk_token),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(payload, db)
+
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Only the owner can remove someone else, OR a user can leave themselves
+    is_owner = (workspace.created_by == user.id)
+    is_leaving = (user.id == member_user_id)
+
+    if not (is_owner or is_leaving) and user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Prevent owner from leaving
+    if is_leaving and is_owner:
+        raise HTTPException(status_code=400, detail="Owner cannot leave the workspace. Delete it instead.")
+
+    member = db.query(WorkspaceMember).filter(
+        WorkspaceMember.workspace_id == workspace_id,
+        WorkspaceMember.user_id == member_user_id
+    ).first()
+
+    if not member:
+        raise HTTPException(status_code=404, detail="User is not a member of this workspace")
+
+    db.delete(member)
+    db.commit()
+
+    return {"message": "Member removed successfully"}

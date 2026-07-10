@@ -6,7 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import {
-  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser, deleteDocument, getDocumentBlobUrl,
+  getDocuments, getWorkspaces, askAI, uploadDocument, createTextDocument, getCurrentUser, deleteDocument, getDocumentBlobUrl, getWorkspaceMembers, removeWorkspaceMember,
   type Document, type Workspace, type User
 } from "@/services/api";
 
@@ -54,7 +54,12 @@ export default function WorkspacePage() {
   const [aiLoading, setAiLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const isAdmin = user?.role === "super_admin";
+  // Members modal state
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
+  const [members, setMembers] = useState<User[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  const isOwner = Boolean(user && workspace && user.id === workspace.created_by);
 
   const refreshDocs = async () => {
     const docs = await getDocuments(getToken, workspaceId);
@@ -71,13 +76,19 @@ export default function WorkspacePage() {
 
         const allWs = await getWorkspaces(getToken);
         const ws = allWs.find(w => w.id === workspaceId);
-        if (ws) setWorkspace(ws);
+        if (ws) {
+          setWorkspace(ws);
+        } else {
+          router.push("/dashboard");
+          return;
+        }
 
         const docs = await getDocuments(getToken, workspaceId);
         setDocuments(docs);
         if (docs.length > 0) setSelectedDoc(docs[0]);
       } catch (err: any) {
         if (err?.status === 401) { router.push("/signin"); return; }
+        if (err?.status === 403 || err?.status === 404) { router.push("/dashboard"); return; }
         console.error("Workspace load error:", err);
       } finally {
         setLoading(false);
@@ -124,7 +135,7 @@ export default function WorkspacePage() {
 
   // ── File Upload ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isAdmin) return;
+    if (!isOwner) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -153,7 +164,7 @@ export default function WorkspacePage() {
 
   // ── Text Document Creation ──
   const handleTextUpload = async () => {
-    if (!isAdmin) return;
+    if (!isOwner) return;
     if (!textTitle.trim() || !textContent.trim()) {
       setUploadError("Title and content are required");
       return;
@@ -218,6 +229,44 @@ export default function WorkspacePage() {
     setQuestion(text);
   };
 
+  const handleOpenMembers = async () => {
+    setMembersModalOpen(true);
+    setLoadingMembers(true);
+    try {
+      const res = await getWorkspaceMembers(getToken, workspaceId);
+      setMembers(res.members);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: number) => {
+    if (!confirm("Are you sure you want to remove this member?")) return;
+    try {
+      await removeWorkspaceMember(getToken, workspaceId, memberId);
+      setMembers(members.filter((m) => m.id !== memberId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLeaveWorkspace = async () => {
+    if (!user) return;
+    if (isOwner) {
+      alert("As the owner, you cannot leave. You must delete the workspace instead.");
+      return;
+    }
+    if (!confirm("Are you sure you want to leave this workspace?")) return;
+    try {
+      await removeWorkspaceMember(getToken, workspaceId, user.id);
+      router.push("/dashboard");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const wsName = workspace?.name || "Workspace";
   const wsInitials = workspace ? getInitials(workspace.name) : "WS";
 
@@ -245,6 +294,12 @@ export default function WorkspacePage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleOpenMembers}
+            className="px-3 py-1.5 bg-neutral-100 text-neutral-900 text-xs font-medium rounded-md hover:bg-neutral-200 transition-colors"
+          >
+            Members
+          </button>
           <button
             onClick={handleCopyCode}
             className="px-3 py-1.5 bg-neutral-900 text-white text-xs font-medium rounded-md hover:bg-neutral-800 transition-colors"
@@ -283,7 +338,7 @@ export default function WorkspacePage() {
                         </svg>
                         <span className="truncate">{doc.title}</span>
                       </button>
-                      {isAdmin && (
+                      {isOwner && (
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -306,8 +361,8 @@ export default function WorkspacePage() {
                   ))
                 )}
               </div>
-              {/* Upload button - admin only */}
-              {isAdmin && (
+              {/* Upload button - owner only */}
+              {isOwner && (
                 <button
                   onClick={() => { setUploadModalOpen(true); setUploadError(""); setUploadSuccess(""); }}
                   className="mt-3 w-full flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-900 transition-colors"
@@ -522,8 +577,8 @@ export default function WorkspacePage() {
         </aside>
       </div>
 
-      {/* Upload Modal - only rendered for admin */}
-      {isAdmin && uploadModalOpen && (
+      {/* Upload Modal - only rendered for owner */}
+      {isOwner && uploadModalOpen && (
         <>
           <div className="fixed inset-0 bg-neutral-900/20 backdrop-blur-[2px] z-50 transition-opacity duration-200 ease-out" onClick={() => setUploadModalOpen(false)}></div>
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md px-4 transition-all duration-200 ease-out">
@@ -611,6 +666,67 @@ export default function WorkspacePage() {
                   <p className="text-xs text-neutral-500 animate-pulse">Uploading...</p>
                 </div>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Members Modal */}
+      {membersModalOpen && (
+        <>
+          <div className="fixed inset-0 bg-neutral-900/20 backdrop-blur-[2px] z-50 transition-opacity duration-200 ease-out" onClick={() => setMembersModalOpen(false)}></div>
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm px-4 transition-all duration-200 ease-out">
+            <div className="bg-white rounded-xl shadow-xl border border-neutral-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+                <h2 className="text-base font-semibold text-neutral-900">Workspace Members</h2>
+                <button onClick={() => setMembersModalOpen(false)} className="text-neutral-400 hover:text-neutral-600 transition-colors p-1 rounded-md hover:bg-neutral-100">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-5 max-h-80 overflow-y-auto custom-scrollbar space-y-3">
+                {loadingMembers ? (
+                  <p className="text-center text-sm text-neutral-500">Loading members...</p>
+                ) : (
+                  members.map((member) => (
+                    <div key={member.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-semibold text-neutral-600">
+                          {getInitials(member.name || member.email)}
+                        </div>
+                        <div className="text-sm font-medium text-neutral-900">
+                          {member.name || member.email}
+                          {member.id === workspace?.created_by && <span className="ml-2 text-[10px] bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Owner</span>}
+                        </div>
+                      </div>
+                      {isOwner && member.id !== workspace?.created_by && (
+                        <button
+                          onClick={() => handleRemoveMember(member.id)}
+                          className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="px-5 py-4 bg-neutral-50 border-t border-neutral-100 flex justify-between">
+                {!isOwner ? (
+                  <button onClick={handleLeaveWorkspace} className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors border border-red-200">
+                    Leave Workspace
+                  </button>
+                ) : (
+                  <div></div> /* Empty div to push the close button to the right */
+                )}
+                <button onClick={() => setMembersModalOpen(false)} className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </>

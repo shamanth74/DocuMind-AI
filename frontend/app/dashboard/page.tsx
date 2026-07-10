@@ -69,9 +69,5 @@ export default function Dashboard() {
     );
   }
 
-  if (user.role === "super_admin") {
-    return <AdminDashboard workspaces={workspaces} getToken={getToken} onRefresh={refreshWorkspaces} />;
-  }
-
-  return <UserDashboard workspaces={workspaces} getToken={getToken} onRefresh={refreshWorkspaces} />;
+  return <UserDashboard currentUser={user} workspaces={workspaces} getToken={getToken} onRefresh={refreshWorkspaces} />;
 }

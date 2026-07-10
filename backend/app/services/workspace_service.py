@@ -20,7 +20,7 @@ def create_workspace(db: Session, name: str, user_id: int) -> str:
     for _ in range(max_retries):
         invite_code = generate_invite_code()
 
-        workspace = Workspace(name=name, invite_code=invite_code)
+        workspace = Workspace(name=name, invite_code=invite_code, created_by=user_id)
         db.add(workspace)
 
         try:
